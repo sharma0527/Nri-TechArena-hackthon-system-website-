@@ -36,14 +36,14 @@ export default function RegistrationForm() {
     const [globalStatus, setGlobalStatus] = useState(null);
 
     useEffect(() => {
-        axios.get("http://localhost:5000/api/payment-status")
+        axios.get("https://nri-techarena-hackthon-system-website.onrender.com/api/payment-status")
             .then(res => setGlobalStatus(res.data))
             .catch(err => console.error(err));
     }, []);
 
     useEffect(() => {
         if (step === 2) {
-            axios.get("http://localhost:5000/api/payment-config")
+            axios.get("https://nri-techarena-hackthon-system-website.onrender.com/api/payment-config")
                 .then(res => setPayment(res.data))
                 .catch(err => console.error(err));
         }
@@ -91,7 +91,7 @@ export default function RegistrationForm() {
         setLoading(true);
 
         try {
-            const res = await axios.post("http://localhost:5000/api/register", {
+            const res = await axios.post("https://nri-techarena-hackthon-system-website.onrender.com/api/register", {
                 teamName, domain, department, branch, teamLeadName, teamLeadEmail, teamLeadPhone, members
             });
             setOrderId(res.data.orderId);
@@ -127,7 +127,7 @@ export default function RegistrationForm() {
             formData.append("utr", utr);
             formData.append("screenshot", screenshot);
 
-            const res = await axios.post("http://localhost:5000/api/verify-payment", formData, {
+            const res = await axios.post("https://nri-techarena-hackthon-system-website.onrender.com/api/verify-payment", formData, {
                 headers: { "Content-Type": "multipart/form-data" }
             });
 

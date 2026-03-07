@@ -97,7 +97,7 @@ function App() {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/send-mails",
+        "https://nri-techarena-hackthon-system-website.onrender.com/send-mails",
         formData,
         {
           headers: {
@@ -136,7 +136,7 @@ function App() {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/send-single-mail",
+        "https://nri-techarena-hackthon-system-website.onrender.com/send-single-mail",
         {
           email: singleEmail,
           subject,
@@ -355,7 +355,7 @@ function App() {
                 style={{ background: "linear-gradient(135deg, #3b82f6, #2563eb)", height: "auto", padding: "16px" }}
                 onClick={async () => {
                   try {
-                    await axios.post("http://localhost:5000/api/change-qr", { qrId: 3 });
+                    await axios.post("https://nri-techarena-hackthon-system-website.onrender.com/api/change-qr", { qrId: 3 });
                     alert("✅ Successfully updated! Current QR is now: Sharma (SBI)");
                   } catch (e) { alert("Failed to change QR") }
                 }}
@@ -367,7 +367,7 @@ function App() {
                 style={{ background: "linear-gradient(135deg, #10b981, #059669)", height: "auto", padding: "16px" }}
                 onClick={async () => {
                   try {
-                    await axios.post("http://localhost:5000/api/change-qr", { qrId: 2 });
+                    await axios.post("https://nri-techarena-hackthon-system-website.onrender.com/api/change-qr", { qrId: 2 });
                     alert("✅ Successfully updated! Current QR is now: Siva Kotamma Challa (Axis Bank)");
                   } catch (e) { alert("Failed to change QR") }
                 }}

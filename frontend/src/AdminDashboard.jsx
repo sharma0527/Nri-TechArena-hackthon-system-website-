@@ -18,7 +18,7 @@ export default function AdminDashboard() {
             return;
 
         try {
-            await axios.delete(`http://localhost:5000/api/delete-registration/${orderId}`, {
+            await axios.delete(`https://nri-techarena-hackthon-system-website.onrender.com/api/delete-registration/${orderId}`, {
                 headers: { authorization: "supersecretadmin" }
             });
             alert("Registration deleted successfully");
@@ -33,7 +33,7 @@ export default function AdminDashboard() {
         setLoading(true);
         setError(null);
         try {
-            const res = await axios.get("http://localhost:5000/admin/registrations");
+            const res = await axios.get("https://nri-techarena-hackthon-system-website.onrender.com/admin/registrations");
             setRegistrations(res.data);
         } catch (err) {
             setError(err.response?.data?.error || "Failed to fetch registrations.");
@@ -44,7 +44,7 @@ export default function AdminDashboard() {
 
     const fetchActiveQR = async () => {
         try {
-            const res = await axios.get("http://localhost:5000/api/payment-config");
+            const res = await axios.get("https://nri-techarena-hackthon-system-website.onrender.com/api/payment-config");
             setActiveQR(res.data.id);
         } catch (e) {
             console.error(e);
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
 
     const changeQR = async (qrId) => {
         try {
-            await axios.post("http://localhost:5000/api/change-qr", { qrId });
+            await axios.post("https://nri-techarena-hackthon-system-website.onrender.com/api/change-qr", { qrId });
             setActiveQR(qrId);
         } catch (e) {
             console.error(e);
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
 
     const fetchPaymentStatus = async () => {
         try {
-            const res = await axios.get("http://localhost:5000/api/payment-status");
+            const res = await axios.get("https://nri-techarena-hackthon-system-website.onrender.com/api/payment-status");
             setPaymentStatus(res.data);
         } catch (e) {
             console.error(e);
@@ -72,7 +72,7 @@ export default function AdminDashboard() {
 
     const togglePayments = async () => {
         try {
-            const res = await axios.post("http://localhost:5000/api/toggle-payment", {}, {
+            const res = await axios.post("https://nri-techarena-hackthon-system-website.onrender.com/api/toggle-payment", {}, {
                 headers: { authorization: "supersecretadmin" }
             });
             setPaymentStatus(res.data);

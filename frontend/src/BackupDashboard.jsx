@@ -12,7 +12,7 @@ export default function BackupDashboard() {
         setLoading(true);
         setError(null);
         try {
-            const res = await axios.get("http://localhost:5000/admin/backups");
+            const res = await axios.get("https://nri-techarena-hackthon-system-website.onrender.com/admin/backups");
             setRegistrations(res.data);
         } catch (err) {
             setError(err.response?.data?.error || "Failed to fetch backups.");
