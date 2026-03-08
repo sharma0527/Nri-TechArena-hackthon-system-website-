@@ -17,6 +17,8 @@ const app = express();
 
 // ─── CORS: Only allow your frontend domains ────────────────────────────────────
 const allowedOrigins = [
+  "https://nri-techarena-hackthon-system-website-527.pages.dev",
+  "https://nri-techarena-hackthon-system-website.pages.dev",
   "https://nri-techarena-hackthon-system-website-.pages.dev",
   "http://localhost:5173",
   "http://localhost:3000",
@@ -30,6 +32,7 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     } else {
+      console.log("Blocked by CORS:", origin);
       return callback(new Error("CORS not allowed from this origin"));
     }
   },
