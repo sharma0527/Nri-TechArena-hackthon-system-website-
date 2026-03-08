@@ -14,7 +14,9 @@ const sharp = require("sharp");
 const paymentConfig = require("./paymentConfig");
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: "*"
+}));
 app.use(express.json());
 
 // ─── Health Checks ─────────────────────────────────────────────────────────────
