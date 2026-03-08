@@ -25,20 +25,25 @@ const allowedOrigins = [
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
-app.use(cors({
+const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like Postman or server-to-server)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
-    } else {
-      console.log("Blocked by CORS:", origin);
-      return callback(new Error("CORS not allowed from this origin"));
     }
+    console.log("Blocked by CORS:", origin);
+    return callback(new Error("Blocked by CORS: " + origin));
   },
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
-}));
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests — THIS IS THE KEY FIX
+app.options("*", cors(corsOptions));
+
 app.use(express.json());
 
 // ─── Health Checks ─────────────────────────────────────────────────────────────
