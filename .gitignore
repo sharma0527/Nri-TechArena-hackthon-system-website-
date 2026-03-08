@@ -7,6 +7,8 @@ frontend/node_modules/
 .env
 backend/.env
 frontend/.env
+backend/credentials.json
+
 
 # Data files, backups and credentials
 *.xlsx
