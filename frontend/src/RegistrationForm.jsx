@@ -18,6 +18,7 @@ export default function RegistrationForm() {
     const [members, setMembers] = useState([
         { name: "", email: "", branch: "" },
         { name: "", email: "", branch: "" },
+        { name: "", email: "", branch: "" },
         { name: "", email: "", branch: "" }
     ]);
 
@@ -59,7 +60,7 @@ export default function RegistrationForm() {
     };
 
     const addMember = () => {
-        if (members.length < 4) {
+        if (members.length < 5) {
             setMembers([...members, { name: "", email: "", branch: "" }]);
         }
     };
@@ -83,8 +84,8 @@ export default function RegistrationForm() {
         }
 
         const validMembers = members.filter(m => m.name.trim() !== "" && m.email.trim() !== "");
-        if (validMembers.length < 3) {
-            setError("A team must have a minimum of 4 members (Team Lead + at least 3 members). Please fill their details.");
+        if (validMembers.length < 4) {
+            setError("A team must have a minimum of 5 members (Team Lead + at least 4 members). Please fill their details.");
             return;
         }
 
@@ -179,6 +180,7 @@ export default function RegistrationForm() {
         setTeamLeadEmail("");
         setTeamLeadPhone("");
         setMembers([
+            { name: "", email: "", branch: "" },
             { name: "", email: "", branch: "" },
             { name: "", email: "", branch: "" },
             { name: "", email: "", branch: "" }
@@ -548,8 +550,8 @@ export default function RegistrationForm() {
 
                 <div className="form-section">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                        <h3 style={{ margin: 0 }}>Team Members (Min 3, Max 4)</h3>
-                        <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{members.length}/4</span>
+                        <h3 style={{ margin: 0 }}>Team Members (Min 4, Max 5)</h3>
+                        <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{members.length}/5</span>
                     </div>
 
                     {members.map((member, i) => (
@@ -570,7 +572,7 @@ export default function RegistrationForm() {
                         </div>
                     ))}
 
-                    {members.length < 4 && (
+                    {members.length < 5 && (
                         <button type="button" onClick={addMember} style={{ background: "transparent", border: "1px dashed var(--primary)", color: "var(--primary)", width: "100%", padding: "12px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                             <Plus size={16} /> Add Member
                         </button>
