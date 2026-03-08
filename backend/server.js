@@ -17,21 +17,24 @@ const app = express();
 
 // ─── CORS: Only allow your frontend domains ────────────────────────────────────
 const allowedOrigins = [
+  "https://nri-techarena-hackthon-system-website-.pages.dev",
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://nri-techarena-hackthon-system-website.pages.dev",
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
+    // Allow requests with no origin (like Postman or server-to-server)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
+    } else {
+      return callback(new Error("CORS not allowed from this origin"));
     }
-    return callback(new Error("Not allowed by CORS"));
-  }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
 }));
 app.use(express.json());
 
