@@ -14,8 +14,23 @@ const sharp = require("sharp");
 const paymentConfig = require("./paymentConfig");
 
 const app = express();
+
+// ─── CORS: Only allow your frontend domains ────────────────────────────────────
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: "*"
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("Not allowed by CORS"));
+  }
 }));
 app.use(express.json());
 
@@ -32,7 +47,7 @@ app.get("/health", (req, res) => {
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ─── Google API Setup (Sheets + Drive) ─────────────────────────────────────────
-const SHEET_ID = "1LarTOmgXNCCmcQ0Lu-MRIlCY3fvrUDNzqoPiN__yCOQ";
+const SHEET_ID = process.env.GOOGLE_SHEET_ID || "1LarTOmgXNCCmcQ0Lu-MRIlCY3fvrUDNzqoPiN__yCOQ";
 let sheets, drive;
 
 let auth;
@@ -50,7 +65,7 @@ if (process.env.GOOGLE_CREDENTIALS) {
     console.log("⚠️  Failed to parse GOOGLE_CREDENTIALS env var:", e.message);
   }
 } else {
-  const serviceAccountPath = path.join(__dirname, "state-level-hackthon-ce0a3cadf7321.json");
+  const serviceAccountPath = path.join(__dirname, "credentials.json");
   if (fs.existsSync(serviceAccountPath)) {
     auth = new google.auth.GoogleAuth({
       keyFile: serviceAccountPath,
@@ -99,22 +114,22 @@ async function uploadToDrive(filePath, fileName) {
     const response = await drive.files.create({
       requestBody: {
         name: fileName,
-        mimeType: "image/png"
+        mimeType: "image/png",
+        parents: ["1X8g2REvmp6cnXwcuYn_LKDanTSvv88jq"]
       },
       media: {
         mimeType: "image/png",
         body: fs.createReadStream(filePath)
       },
-      fields: "id, webViewLink"
+      fields: "id"
     });
-    // Make file viewable by anyone with link
-    await drive.permissions.create({
-      fileId: response.data.id,
-      requestBody: { role: "reader", type: "anyone" }
-    });
-    const viewLink = `https://drive.google.com/file/d/${response.data.id}/view`;
-    console.log("✅ Screenshot uploaded to Drive:", viewLink);
-    return viewLink;
+
+    // Convert to direct image URL
+    const fileId = response.data.id;
+    const directUrl = `https://drive.google.com/uc?id=${fileId}`;
+
+    console.log("✅ Screenshot uploaded to Drive:", directUrl);
+    return directUrl;
   } catch (error) {
     console.error("❌ Drive upload error:", error.message);
     return null;
@@ -230,7 +245,9 @@ const backupDBPath = path.join(__dirname, "registrations_testing_backup.xlsx");
     }
   }
 });
-console.log(`✅ Locked ${usedUTRs.size} previously successful UTRs and ${usedImageHashes.size} hashes from all databases.`);
+if (usedUTRs.size > 0 || usedImageHashes.size > 0) {
+  console.log(`✅ Locked ${usedUTRs.size} previously successful UTRs and ${usedImageHashes.size} hashes from all databases.`);
+}
 
 // ─── Dynamic Fee Calculator ────────────────────────────────────────────────────
 function calculateFee(memberCount) {

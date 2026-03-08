@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { Plus, Trash2, CheckCircle2, AlertCircle, ShieldCheck, UploadCloud, Lock, Loader2, XCircle } from "lucide-react";
+import API from "./api";
 import qrImage from "./assets/qr.jpeg";
 import qrImage2 from "./assets/qr-2.jpeg";
 
@@ -36,14 +37,14 @@ export default function RegistrationForm() {
     const [globalStatus, setGlobalStatus] = useState(null);
 
     useEffect(() => {
-        axios.get("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/payment-status")
+        axios.get(`${API}/api/payment-status`)
             .then(res => setGlobalStatus(res.data))
             .catch(err => console.error(err));
     }, []);
 
     useEffect(() => {
         if (step === 2) {
-            axios.get("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/payment-config")
+            axios.get(`${API}/api/payment-config`)
                 .then(res => setPayment(res.data))
                 .catch(err => console.error(err));
         }
@@ -91,7 +92,7 @@ export default function RegistrationForm() {
         setLoading(true);
 
         try {
-            const res = await axios.post("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/register", {
+            const res = await axios.post(`${API}/api/register`, {
                 teamName, domain, department, branch, teamLeadName, teamLeadEmail, teamLeadPhone, members
             });
             setOrderId(res.data.orderId);
@@ -127,7 +128,7 @@ export default function RegistrationForm() {
             formData.append("utr", utr);
             formData.append("screenshot", screenshot);
 
-            const res = await axios.post("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/verify-payment", formData, {
+            const res = await axios.post(`${API}/api/verify-payment`, formData, {
                 headers: { "Content-Type": "multipart/form-data" }
             });
 

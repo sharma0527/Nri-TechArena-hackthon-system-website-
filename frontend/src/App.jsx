@@ -4,6 +4,7 @@ import { UploadCloud, FileSpreadsheet, Send, CheckCircle2, AlertCircle, BarChart
 import Particles from "react-tsparticles";
 import { loadSlim } from "tsparticles-slim";
 import "./index.css";
+import API from "./api";
 import RegistrationForm from "./RegistrationForm";
 import AdminDashboard from "./AdminDashboard";
 import BackupDashboard from "./BackupDashboard";
@@ -97,7 +98,7 @@ function App() {
 
     try {
       const res = await axios.post(
-        "https://nri-techarena-hackthon-system-website-wry4.onrender.com/send-mails",
+        `${API}/send-mails`,
         formData,
         {
           headers: {
@@ -136,7 +137,7 @@ function App() {
 
     try {
       const res = await axios.post(
-        "https://nri-techarena-hackthon-system-website-wry4.onrender.com/send-single-mail",
+        `${API}/send-single-mail`,
         {
           email: singleEmail,
           subject,
@@ -355,7 +356,7 @@ function App() {
                 style={{ background: "linear-gradient(135deg, #3b82f6, #2563eb)", height: "auto", padding: "16px" }}
                 onClick={async () => {
                   try {
-                    await axios.post("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/change-qr", { qrId: 3 });
+                    await axios.post(`${API}/api/change-qr`, { qrId: 3 });
                     alert("✅ Successfully updated! Current QR is now: Sharma (SBI)");
                   } catch (e) { alert("Failed to change QR") }
                 }}
@@ -367,7 +368,7 @@ function App() {
                 style={{ background: "linear-gradient(135deg, #10b981, #059669)", height: "auto", padding: "16px" }}
                 onClick={async () => {
                   try {
-                    await axios.post("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/change-qr", { qrId: 2 });
+                    await axios.post(`${API}/api/change-qr`, { qrId: 2 });
                     alert("✅ Successfully updated! Current QR is now: Siva Kotamma Challa (Axis Bank)");
                   } catch (e) { alert("Failed to change QR") }
                 }}

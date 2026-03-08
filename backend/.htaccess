@@ -15,7 +15,7 @@ php_flag opcache.enable_cli Off
 SetEnv NODE_ENV production
 SetEnv PORT 5000
 SetEnv EMAIL chsharmabsk@gmail.com
-SetEnv PASSWORD "habl odla odpo wgyn"
+SetEnv PASSWORD "igfagekhhzndgzid"
 SetEnv EXPECTED_AMOUNT 500
 SetEnv ALLOWED_START_DATE 2026-03-01
 SetEnv ALLOWED_END_DATE 2026-03-10

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { Loader2, AlertCircle, RefreshCcw, Image as ImageIcon, X, PauseCircle, PlayCircle, Clock } from "lucide-react";
+import API from "./api";
 
 export default function AdminDashboard() {
     const [registrations, setRegistrations] = useState([]);
@@ -18,7 +19,7 @@ export default function AdminDashboard() {
             return;
 
         try {
-            await axios.delete(`https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/delete-registration/${orderId}`, {
+            await axios.delete(`${API}/api/delete-registration/${orderId}`, {
                 headers: { authorization: "supersecretadmin" }
             });
             alert("Registration deleted successfully");
@@ -33,7 +34,7 @@ export default function AdminDashboard() {
         setLoading(true);
         setError(null);
         try {
-            const res = await axios.get("https://nri-techarena-hackthon-system-website-wry4.onrender.com/admin/registrations");
+            const res = await axios.get(`${API}/admin/registrations`);
             setRegistrations(res.data);
         } catch (err) {
             setError(err.response?.data?.error || "Failed to fetch registrations.");
@@ -44,7 +45,7 @@ export default function AdminDashboard() {
 
     const fetchActiveQR = async () => {
         try {
-            const res = await axios.get("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/payment-config");
+            const res = await axios.get(`${API}/api/payment-config`);
             setActiveQR(res.data.id);
         } catch (e) {
             console.error(e);
@@ -53,7 +54,7 @@ export default function AdminDashboard() {
 
     const changeQR = async (qrId) => {
         try {
-            await axios.post("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/change-qr", { qrId });
+            await axios.post(`${API}/api/change-qr`, { qrId });
             setActiveQR(qrId);
         } catch (e) {
             console.error(e);
@@ -63,7 +64,7 @@ export default function AdminDashboard() {
 
     const fetchPaymentStatus = async () => {
         try {
-            const res = await axios.get("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/payment-status");
+            const res = await axios.get(`${API}/api/payment-status`);
             setPaymentStatus(res.data);
         } catch (e) {
             console.error(e);
@@ -72,7 +73,7 @@ export default function AdminDashboard() {
 
     const togglePayments = async () => {
         try {
-            const res = await axios.post("https://nri-techarena-hackthon-system-website-wry4.onrender.com/api/toggle-payment", {}, {
+            const res = await axios.post(`${API}/api/toggle-payment`, {}, {
                 headers: { authorization: "supersecretadmin" }
             });
             setPaymentStatus(res.data);
@@ -254,7 +255,7 @@ export default function AdminDashboard() {
                                                 title="Click to view full size"
                                             >
                                                 <img
-                                                    src={reg.Screenshot}
+                                                    src={reg.Screenshot.startsWith("/") ? `${API}${reg.Screenshot}` : reg.Screenshot}
                                                     alt="Payment"
                                                     style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)", transition: "transform 0.2s" }}
                                                     onMouseOver={(e) => e.currentTarget.style.transform = "scale(1.1)"}
@@ -301,7 +302,7 @@ export default function AdminDashboard() {
                             <X size={24} />
                         </button>
                         <img
-                            src={selectedImage}
+                            src={selectedImage.startsWith("/") ? `${API}${selectedImage}` : selectedImage}
                             alt="Payment Screenshot"
                             style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: "8px", border: "2px solid rgba(255,255,255,0.1)" }}
                         />
