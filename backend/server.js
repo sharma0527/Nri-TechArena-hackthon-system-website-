@@ -35,26 +35,44 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 const SHEET_ID = "1LarTOmgXNCCmcQ0Lu-MRIlCY3fvrUDNzqoPiN__yCOQ";
 let sheets, drive;
 
-const serviceAccountPath = "S:\\OPPO A17\\original\\mail-automation\\credentials.json.json";
-if (fs.existsSync(serviceAccountPath)) {
+let auth;
+if (process.env.GOOGLE_CREDENTIALS) {
   try {
-    const auth = new google.auth.GoogleAuth({
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+      ],
+    });
+  } catch (e) {
+    console.log("⚠️  Failed to parse GOOGLE_CREDENTIALS env var:", e.message);
+  }
+} else {
+  const serviceAccountPath = path.join(__dirname, "state-level-hackthon-ce0a3cadf7321.json");
+  if (fs.existsSync(serviceAccountPath)) {
+    auth = new google.auth.GoogleAuth({
       keyFile: serviceAccountPath,
       scopes: [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
       ],
     });
+  } else {
+    console.log("⚠️  Credentials file not found — Google Sheets/Drive disabled.");
+    console.log("   Place your credentials JSON at:", serviceAccountPath);
+  }
+}
+
+if (auth) {
+  try {
     sheets = google.sheets({ version: "v4", auth });
-    // Use drive v3
     drive = google.drive({ version: "v3", auth });
     console.log("✅ Connected to Google Sheets + Drive API");
   } catch (error) {
     console.log("⚠️  Google API auth failed:", error.message);
   }
-} else {
-  console.log("⚠️  Credentials file not found — Google Sheets/Drive disabled.");
-  console.log("   Place your credentials JSON at:", serviceAccountPath);
 }
 
 // ─── Google Sheets: Add Row ────────────────────────────────────────────────────
@@ -234,21 +252,18 @@ async function verifyPayment(imagePath, expectedAmount, utr) {
   const meta = await sharp(imagePath).metadata();
   const isValidMetadata = meta.width >= 500 && meta.height >= 500;
 
-  // Preprocess the image to improve OCR accuracy on dark UI
-  const preprocessedPath = imagePath + "_processed.png";
-  await sharp(imagePath)
-    .resize({ width: 1800 })
+  // Preprocess the image to improve OCR accuracy on dark UI (IN MEMORY for speed)
+  const preprocessedBuffer = await sharp(imagePath)
+    .resize({ width: 1200 }) // Reduced width for 50%+ faster processing
     .grayscale()
     .normalize()
     .sharpen()
-    .toFile(preprocessedPath);
+    .toBuffer();
 
-  const result = await Tesseract.recognize(preprocessedPath, "eng", {
+  const result = await Tesseract.recognize(preprocessedBuffer, "eng", {
     tessedit_pageseg_mode: 6,
     tessedit_ocr_engine_mode: 1
   });
-
-  try { fs.unlinkSync(preprocessedPath); } catch (e) { }
 
   let rawText = result.data.text.toLowerCase();
   const text = rawText.replace(/\\n/g, " ");
@@ -575,12 +590,19 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
     fs.renameSync(req.file.path, permanentPath);
     const localImageUrl = `/uploads/${newFilename}`;
 
-    // Upload screenshot to Google Drive
-    const driveUrl = await uploadToDrive(permanentPath, newFilename);
-    const screenshotUrl = driveUrl || `http://localhost:5000${localImageUrl}`;
+    // 1. Upload screenshot to Google Drive first to get permanent URL
+    let screenshotUrl = "";
+    try {
+      const driveUrl = await uploadToDrive(permanentPath, newFilename);
+      const backendUrl = process.env.NODE_ENV === "production"
+        ? "https://nri-techarena-hackthon-system-website-wry4.onrender.com"
+        : "http://localhost:5000";
+      screenshotUrl = driveUrl || `${backendUrl}${localImageUrl}`;
+    } catch (e) {
+      screenshotUrl = `http://localhost:5000${localImageUrl}`;
+    }
 
     const members = reg.members || [];
-
     const activeAccount = paymentConfig.accounts.find(a => a.id === paymentConfig.activeQR);
 
     // ── Save to Excel ──
@@ -600,7 +622,7 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
       Receiver: activeAccount ? activeAccount.name : "Unknown",
       QR_ID: activeAccount ? activeAccount.id : 0,
       ScreenshotHash: imageHash,
-      Screenshot: screenshotUrl,
+      Screenshot: screenshotUrl, // Fixed to use actual URL
       VerificationScore: verification.score || 0,
       Status: "Confirmed",
       Date: new Date().toLocaleString()
@@ -620,43 +642,56 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
       xlsx.utils.book_append_sheet(workbook, xlsx.utils.json_to_sheet([excelRow]), "Registrations");
     }
     xlsx.writeFile(workbook, excelPath);
-    console.log("✅ Saved to Excel");
+    console.log("✅ Saved to Local Excel");
 
-    // ── Send Confirmation Emails ──
-    const emailList = [{ name: reg.teamLeadName, email: reg.teamLeadEmail }];
-    const validMembers = members.filter(m => m.email && m.email.trim() !== "");
-    validMembers.forEach(m => emailList.push({ name: m.name || "Participant", email: m.email.trim() }));
-
-    for (const member of emailList) {
-      await sendConfirmationEmail(member.email, member.name, reg.teamName, reg.domain, normalizedUTR);
-    }
-
-    // ── Google Sheets Append ──
-    await addToSheet([
-      reg.orderId,
-      reg.teamName,
-      reg.department || "",
-      reg.domain || "",
-      totalMembers.toString(),
-      reg.teamLeadName,
-      reg.teamLeadEmail,
-      reg.teamLeadPhone || "",
-      normalizedUTR,
-      amount.toString(),
-      imageHash,
-      screenshotUrl,
-      (verification.score || 0).toString(),
-      "Confirmed",
-      new Date().toLocaleString(),
-      activeAccount ? activeAccount.name : "Unknown",
-      activeAccount ? activeAccount.id.toString() : "0"
-    ]);
-
-    // ── Response ──
+    // ── Immediate Response (Fast Verify) ──
     res.json({
       success: true,
       message: "Payment verified and registration confirmed!",
     });
+
+    // ── BACKGROUND TASKS (DO NOT BLOCK RESPONSE) ──
+    (async () => {
+      console.log(`⏳ Starting background tasks for ${orderId}...`);
+
+      try {
+        // 2. Google Sheets Append
+        await addToSheet([
+          reg.orderId,
+          reg.teamName,
+          reg.department || "",
+          reg.domain || "",
+          totalMembers.toString(),
+          reg.teamLeadName,
+          reg.teamLeadEmail,
+          reg.teamLeadPhone || "",
+          normalizedUTR,
+          amount.toString(),
+          imageHash,
+          screenshotUrl,
+          (verification.score || 0).toString(),
+          "Confirmed",
+          new Date().toLocaleString(),
+          activeAccount ? activeAccount.name : "Unknown",
+          activeAccount ? activeAccount.id.toString() : "0"
+        ]);
+
+        // 3. Send Confirmation Emails
+        const emailList = [{ name: reg.teamLeadName, email: reg.teamLeadEmail }];
+        const validMembers = members.filter(m => m.email && m.email.trim() !== "");
+        validMembers.forEach(m => emailList.push({ name: m.name || "Participant", email: m.email.trim() }));
+
+        // Execute email sending in parallel
+        await Promise.allSettled(
+          emailList.map(member =>
+            sendConfirmationEmail(member.email, member.name, reg.teamName, reg.domain, normalizedUTR)
+          )
+        );
+        console.log(`✅ Completed background tasks for ${orderId}`);
+      } catch (err) {
+        console.error(`❌ Background tasks failed for ${orderId}:`, err);
+      }
+    })();
 
   } catch (error) {
     console.error("❌ Verification Error:", error);

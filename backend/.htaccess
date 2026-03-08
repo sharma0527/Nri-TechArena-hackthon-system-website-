@@ -1,0 +1,35 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+# IMPORTANT: Replace these two paths with your exact cPanel file paths
+PassengerAppRoot "/home/your_cpanel_username/public_html/backend"
+PassengerBaseURI "/"
+PassengerNodejs "/home/your_cpanel_username/nodevenv/public_html/backend/18/bin/node"
+PassengerAppType node
+PassengerStartupFile server.js
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
+
+php_flag opcache.enable Off
+php_flag opcache.enable_cli Off
+
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION BEGIN
+<IfModule Litespeed>
+SetEnv NODE_ENV production
+SetEnv PORT 5000
+SetEnv EMAIL chsharmabsk@gmail.com
+SetEnv PASSWORD "habl odla odpo wgyn"
+SetEnv EXPECTED_AMOUNT 500
+SetEnv ALLOWED_START_DATE 2026-03-01
+SetEnv ALLOWED_END_DATE 2026-03-10
+SetEnv RECEIVER_NAME "chilumuru chandra harsha saraman"
+SetEnv DB_HOST localhost
+SetEnv DB_USER root
+SetEnv DB_PASSWORD ""
+SetEnv DB_NAME hackathon_db
+</IfModule>
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION END
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “ea-php83” package as the default “PHP” programming language.
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php83 .php .php8 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit
