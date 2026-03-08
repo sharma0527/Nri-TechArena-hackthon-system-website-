@@ -17,6 +17,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ─── Health Checks ─────────────────────────────────────────────────────────────
+app.get("/", (req, res) => {
+  res.send("Hackathon Registration Backend is running 🚀");
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", service: "hackathon-backend" });
+});
+
 // ─── Static Uploads ────────────────────────────────────────────────────────────
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
