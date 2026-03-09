@@ -33,8 +33,11 @@ const allowedOrigins = [
   "https://nri-tech-arena-hackthon-system-webs.vercel.app",
   "https://nri-tech-arena-hackthon-system-git-affb3c-sharma0527s-projects.vercel.app",
   "https://nri-tech-arena-hackthon-system-website-hvau21qom.vercel.app",
-  // Cloudflare Pages
+  "https://nri-tech-arena-hackthon-system-git-d2617a-sharma0527s-projects.vercel.app",
+  "https://nri-tech-arena-hackthon-system-website-7rvwrhh6l.vercel.app",
+  // Cloudflare Pages (production + preview)
   "https://nri-techarena-hackthon-system-website-527.pages.dev",
+  "https://2967ce05.nri-techarena-hackthon-system-website-527.pages.dev",
   // Local development
   "http://localhost:5173",
   "http://localhost:3000"
@@ -78,7 +81,14 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", service: "hackathon-backend" });
+  res.json({
+    status: "ok",
+    service: "hackathon-backend",
+    email: emailReady ? "ready" : "not configured",
+    emailAccount: process.env.EMAIL ? process.env.EMAIL.replace(/(.{3}).*(@.*)/, '$1***$2') : "missing",
+    sheets: sheets ? "connected" : "disabled",
+    drive: drive ? "connected" : "disabled"
+  });
 });
 
 // ─── Test Route ────────────────────────────────────────────────────────────────
@@ -255,13 +265,32 @@ app.post("/api/toggle-payment", (req, res) => {
 });
 
 // ─── Email Transport ───────────────────────────────────────────────────────────
+let emailReady = false;
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: process.env.EMAIL,
     pass: process.env.PASSWORD,
   },
+  connectionTimeout: 10000,  // 10s to establish connection
+  greetingTimeout: 10000,    // 10s for SMTP greeting
+  socketTimeout: 15000,      // 15s for socket inactivity
 });
+
+// Verify email credentials on startup
+if (process.env.EMAIL && process.env.PASSWORD) {
+  transporter.verify()
+    .then(() => {
+      emailReady = true;
+      console.log(`✅ Email transport verified (${process.env.EMAIL})`);
+    })
+    .catch(err => {
+      console.error(`❌ Email transport FAILED: ${err.message}`);
+      console.error(`   Emails will NOT work until this is fixed.`);
+    });
+} else {
+  console.error("⚠️  EMAIL or PASSWORD env var missing — email features disabled.");
+}
 
 // ─── In-Memory Stores ──────────────────────────────────────────────────────────
 const registrationsDB = {};
@@ -524,10 +553,16 @@ async function sendConfirmationEmail(to, name, teamName, domain, utr) {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    // Timeout after 15s to prevent hanging
+    const sendWithTimeout = Promise.race([
+      transporter.sendMail(mailOptions),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Email timeout after 15s")), 15000))
+    ]);
+    await sendWithTimeout;
     console.log(`📧 Email sent to ${to}`);
   } catch (e) {
     console.error(`❌ Failed to send email to ${to}:`, e.message);
+    throw e; // Re-throw so Promise.allSettled tracks this as a rejection
   }
 }
 
@@ -567,11 +602,24 @@ app.post("/send-single-mail", async (req, res) => {
     const { email, subject, message } = req.body;
     if (!email || !subject || !message) return res.status(400).json({ error: "Missing required fields" });
 
-    await transporter.sendMail({ from: process.env.EMAIL, to: email, subject, text: message });
+    if (!process.env.EMAIL || !process.env.PASSWORD) {
+      return res.status(503).json({ error: "Email service not configured. Set EMAIL and PASSWORD environment variables." });
+    }
+
+    console.log(`📧 Sending email to ${email}...`);
+
+    // Add a 20s timeout so the request doesn't hang forever
+    const sendWithTimeout = Promise.race([
+      transporter.sendMail({ from: process.env.EMAIL, to: email, subject, text: message }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Email send timed out after 20 seconds")), 20000))
+    ]);
+
+    await sendWithTimeout;
+    console.log(`✅ Email sent to ${email}`);
     res.json({ success: true, message: "Email sent successfully" });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Something went wrong" });
+    console.error(`❌ Email to ${req.body?.email} failed:`, error.message);
+    res.status(500).json({ error: `Email failed: ${error.message}` });
   }
 });
 
@@ -703,15 +751,15 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
     const localImageUrl = `/uploads/${newFilename}`;
 
     // 1. Upload screenshot to Google Drive first to get permanent URL
+    const BACKEND_URL = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL || "https://techarena-api-0ys3.onrender.com";
     let screenshotUrl = "";
     try {
       const driveUrl = await uploadToDrive(permanentPath, newFilename);
-      const backendUrl = process.env.NODE_ENV === "production"
-        ? "https://nri-techarena-hackthon-system-website-wry4.onrender.com"
-        : "http://localhost:5000";
-      screenshotUrl = driveUrl || `${backendUrl}${localImageUrl}`;
+      screenshotUrl = driveUrl || `${BACKEND_URL}${localImageUrl}`;
+      console.log(`📸 Screenshot URL: ${screenshotUrl}`);
     } catch (e) {
-      screenshotUrl = `http://localhost:5000${localImageUrl}`;
+      screenshotUrl = `${BACKEND_URL}${localImageUrl}`;
+      console.log(`⚠️ Drive upload failed, using backend URL: ${screenshotUrl}`);
     }
 
     const members = reg.members || [];
@@ -756,6 +804,19 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
     xlsx.writeFile(workbook, excelPath);
     console.log("✅ Saved to Local Excel");
 
+    // ── Immediate Tasks (Team Lead Email) ──
+    const emailList = [{ name: reg.teamLeadName, email: reg.teamLeadEmail }];
+    const validMembers = members.filter(m => m.email && m.email.trim() !== "");
+    // Separate Lead from others
+    const others = validMembers.map(m => ({ name: m.name || "Participant", email: m.email.trim() }));
+
+    console.log(`📧 Sending primary confirmation email to Team Lead: ${reg.teamLeadEmail}`);
+    try {
+      await sendConfirmationEmail(reg.teamLeadEmail, reg.teamLeadName, reg.teamName, reg.domain, normalizedUTR);
+    } catch (e) {
+      console.error(`⚠️  Lead email failed but registration is still recorded:`, e.message);
+    }
+
     // ── Immediate Response (Fast Verify) ──
     res.json({
       success: true,
@@ -788,20 +849,23 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
           activeAccount ? activeAccount.id.toString() : "0"
         ]);
 
-        // 3. Send Confirmation Emails
-        const emailList = [{ name: reg.teamLeadName, email: reg.teamLeadEmail }];
-        const validMembers = members.filter(m => m.email && m.email.trim() !== "");
-        validMembers.forEach(m => emailList.push({ name: m.name || "Participant", email: m.email.trim() }));
+        // 3. Send Emails to other members
+        if (others.length > 0) {
+          console.log(`📧 Sending confirmation emails to ${others.length} other members: ${others.map(o => o.email).join(", ")}`);
+          const emailResults = await Promise.allSettled(
+            others.map(member =>
+              sendConfirmationEmail(member.email, member.name, reg.teamName, reg.domain, normalizedUTR)
+            )
+          );
 
-        // Execute email sending in parallel
-        await Promise.allSettled(
-          emailList.map(member =>
-            sendConfirmationEmail(member.email, member.name, reg.teamName, reg.domain, normalizedUTR)
-          )
-        );
-        console.log(`✅ Completed background tasks for ${orderId}`);
+          const succeeded = emailResults.filter(r => r.status === "fulfilled").length;
+          const failed = emailResults.filter(r => r.status === "rejected").length;
+          console.log(`📧 Other emails results: ${succeeded} sent, ${failed} failed`);
+        }
+
+        console.log(`✅ Completed all background tasks for ${orderId}`);
       } catch (err) {
-        console.error(`❌ Background tasks failed for ${orderId}:`, err);
+        console.error(`❌ Background tasks failed for ${orderId}:`, err.message, err.stack);
       }
     })();
 
