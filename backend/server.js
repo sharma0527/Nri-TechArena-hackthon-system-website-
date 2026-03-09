@@ -7,10 +7,20 @@ const xlsx = require("xlsx");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const Tesseract = require("tesseract.js");
 const rateLimit = require("express-rate-limit");
 const { google } = require("googleapis");
-const sharp = require("sharp");
+
+let sharp, Tesseract;
+try {
+  sharp = require("sharp");
+} catch (e) {
+  console.log("⚠️  sharp module failed to load:", e.message);
+}
+try {
+  Tesseract = require("tesseract.js");
+} catch (e) {
+  console.log("⚠️  tesseract.js module failed to load:", e.message);
+}
 const paymentConfig = require("./paymentConfig");
 
 const app = express();
@@ -64,6 +74,11 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", service: "hackathon-backend" });
+});
+
+// ─── Test Route ────────────────────────────────────────────────────────────────
+app.get("/api/getRegistrations", (req, res) => {
+  res.json({ status: "API working" });
 });
 
 // ─── Static Uploads ────────────────────────────────────────────────────────────
@@ -288,6 +303,9 @@ function computeImageHash(filePath) {
 
 // ─── OCR Verification ──────────────────────────────────────────────────────────
 async function verifyPayment(imagePath, expectedAmount, utr) {
+  if (!sharp || !Tesseract) {
+    return { success: false, reason: "OCR modules not available on this server", confidence: 0, score: 0 };
+  }
   // 9. Image Metadata Validation (Blocks low-res edited templates)
   const meta = await sharp(imagePath).metadata();
   const isValidMetadata = meta.width >= 500 && meta.height >= 500;
