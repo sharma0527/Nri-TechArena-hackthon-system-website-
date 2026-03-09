@@ -29,8 +29,13 @@ const app = express();
  ─── CORS: Allowed frontend domains ──────────────────────────────────────────
 */
 const allowedOrigins = [
+  // Vercel domains
   "https://nri-tech-arena-hackthon-system-webs.vercel.app",
+  "https://nri-tech-arena-hackthon-system-git-affb3c-sharma0527s-projects.vercel.app",
+  "https://nri-tech-arena-hackthon-system-website-hvau21qom.vercel.app",
+  // Cloudflare Pages
   "https://nri-techarena-hackthon-system-website-527.pages.dev",
+  // Local development
   "http://localhost:5173",
   "http://localhost:3000"
 ];
@@ -309,27 +314,59 @@ async function verifyPayment(imagePath, expectedAmount, utr) {
   // 9. Image Metadata Validation (Blocks low-res edited templates)
   const meta = await sharp(imagePath).metadata();
   const isValidMetadata = meta.width >= 500 && meta.height >= 500;
+  console.log(`📐 Image dimensions: ${meta.width}x${meta.height} | Format: ${meta.format}`);
 
   // Preprocess the image to improve OCR accuracy on dark UI (IN MEMORY for speed)
   const preprocessedBuffer = await sharp(imagePath)
-    .resize({ width: 1200 }) // Reduced width for 50%+ faster processing
+    .resize({ width: 1400 }) // Higher width for better OCR accuracy
     .grayscale()
     .normalize()
-    .sharpen()
+    .sharpen({ sigma: 1.5 }) // Stronger sharpening for blurry screenshots
+    .negate({ alpha: false }) // Invert colors to help OCR on dark-mode screenshots
+    .threshold(140) // Binarize for cleaner text detection
+    .toBuffer();
+
+  // Also try a second pass without negate (for light-mode screenshots)
+  const preprocessedBuffer2 = await sharp(imagePath)
+    .resize({ width: 1400 })
+    .grayscale()
+    .normalize()
+    .sharpen({ sigma: 1.5 })
+    .threshold(140)
     .toBuffer();
 
   const result = await Tesseract.recognize(preprocessedBuffer, "eng", {
     tessedit_pageseg_mode: 6,
-    tessedit_ocr_engine_mode: 1
+    tessedit_ocr_engine_mode: 1,
+    logger: m => { if (m.status === 'recognizing text') console.log(`  OCR progress: ${(m.progress * 100).toFixed(0)}%`); }
   });
 
   let rawText = result.data.text.toLowerCase();
-  const text = rawText.replace(/\\n/g, " ");
-  const confidence = result.data.confidence;
+  let confidence = result.data.confidence;
 
-  console.log("\n════ OCR TEXT DETECTED ════\n");
+  // If confidence is low, try the second preprocessing (light-mode optimized)
+  if (confidence < 50) {
+    console.log(`⚠️  Low OCR confidence (${confidence.toFixed(1)}%), trying alternate preprocessing...`);
+    const result2 = await Tesseract.recognize(preprocessedBuffer2, "eng", {
+      tessedit_pageseg_mode: 6,
+      tessedit_ocr_engine_mode: 1
+    });
+    if (result2.data.confidence > confidence) {
+      rawText = result2.data.text.toLowerCase();
+      confidence = result2.data.confidence;
+      console.log(`✅ Alternate preprocessing improved confidence to ${confidence.toFixed(1)}%`);
+    }
+  }
+
+  const text = rawText.replace(/\n/g, " ");
+
+  console.log("\n════ OCR TEXT DETECTED ════");
   console.log(result.data.text);
-  console.log("\n═══════════════════════════\n");
+  console.log("════ UTR ENTERED ════");
+  console.log(`UTR: ${utr}`);
+  console.log(`Expected Amount: ₹${expectedAmount}`);
+  console.log(`OCR Confidence: ${confidence.toFixed(1)}%`);
+  console.log("═══════════════════════════\n");
 
   // 1️⃣ Get Current Date Automatically
   const today = new Date();
@@ -353,14 +390,18 @@ async function verifyPayment(imagePath, expectedAmount, utr) {
 
   // Exact match required to be perfectly accurate: ONE of the receiver name structures OR UPI must match identically
   const nameCheck = validReceiverNames.some(name => cleanOCRText.includes(name)) || cleanOCRText.includes(exactUpi);
+  console.log(`  👤 Active QR: id=${activeAccount.id} | Name: "${activeAccount.name}" | UPI: "${activeAccount.upi}"`);
+  console.log(`  👤 Valid names checked: ${JSON.stringify(validReceiverNames)}`);
+  console.log(`  👤 Name/UPI found in OCR: ${nameCheck}`);
 
   // 4️⃣ Amount Validation (₹600 / ₹800 / ₹1000)
-  const allowedAmounts = ["600", "800", "1000", "₹600", "₹800", "₹1000"];
-  const cleanTextNum = text.replace(/,| /g, '');
+  // Handle various OCR formats: ₹800, ₹800.00, 800.00, Rs.800, Rs 800, 8,00 (Indian comma)
   const amountStr = expectedAmount.toString();
-  // It has to be an accepted hackathon amount, AND explicitly match the dynamic team member checkout fee:
-  const isAllowedHackathonFee = allowedAmounts.some(amt => cleanTextNum.includes(amt.replace('₹', '')));
+  const cleanTextNum = text.replace(/[₹,\s]/g, '').replace(/\.00/g, '');
+  const allowedAmounts = ["600", "800", "1000"];
+  const isAllowedHackathonFee = allowedAmounts.some(amt => cleanTextNum.includes(amt));
   const amountCheck = isAllowedHackathonFee && cleanTextNum.includes(amountStr);
+  console.log(`  💰 Amount check: looking for "${amountStr}" in cleaned text → ${amountCheck ? "FOUND" : "NOT FOUND"}`);
 
   // 5️⃣ Payment Status Detection
   const successKeywords = [
@@ -374,9 +415,12 @@ async function verifyPayment(imagePath, expectedAmount, utr) {
   ];
   const statusCheck = successKeywords.some(word => cleanOCRText.includes(word));
 
-  // 6️⃣ UTR Pattern Exact Verification
-  // Ensure that the user-submitted UTR exact string is found in the screenshot
-  const utrCheck = utr ? cleanOCRText.includes(utr.toLowerCase()) : false;
+  // 6️⃣ UTR Pattern Verification (Flexible — strips all non-alphanumeric for OCR tolerance)
+  // OCR often inserts spaces, dashes, or misreads characters within UTR strings
+  const cleanUTR = utr ? utr.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
+  const alphanumericOCR = cleanOCRText.replace(/[^a-z0-9]/g, "");
+  const utrCheck = cleanUTR.length > 0 && alphanumericOCR.includes(cleanUTR);
+  console.log(`  🔍 UTR check: "${cleanUTR}" in OCR → ${utrCheck ? "FOUND" : "NOT FOUND"}`);
 
   // 7️⃣ Current Date Validation
   // Includes month fallback or today/now for messy OCR
@@ -408,6 +452,15 @@ async function verifyPayment(imagePath, expectedAmount, utr) {
   if (!isValidMetadata) {
     return { success: false, reason: "Invalid screenshot resolution (suspicious metadata)", confidence, score: 0 };
   }
+
+  // Log all individual checks for debugging
+  console.log(`\n  📋 VERIFICATION SUMMARY:`);
+  console.log(`    ✅/❌ Receiver Name: ${nameCheck}`);
+  console.log(`    ✅/❌ Payment Status: ${statusCheck}`);
+  console.log(`    ✅/❌ Amount (₹${expectedAmount}): ${amountCheck}`);
+  console.log(`    ✅/❌ UTR (${utr}): ${utrCheck}`);
+  console.log(`    ✅/❌ Date: ${dateCheck}`);
+  console.log(`    ✅/❌ Valid Metadata: ${isValidMetadata}\n`);
 
   // 8️⃣ Final Secure Verification Logic
   if (nameCheck && statusCheck && amountCheck && utrCheck && dateCheck) {
@@ -578,10 +631,11 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
     if (!orderId) return res.status(400).json({ success: false, message: "Order ID is required" });
 
     // Step 1: Secure UTR Format Validation (12-22 Alphanumeric)
-    const normalizedUTR = utr ? utr.replace(/\\s/g, "").trim() : "";
+    const normalizedUTR = utr ? utr.replace(/\s/g, "").trim() : "";
     const utrRegex = /^[A-Za-z0-9]{12,22}$/;
     if (!utrRegex.test(normalizedUTR)) {
-      return res.status(400).json({ success: false, message: "Invalid UTR sequence. Must be 12-22 characters." });
+      console.log("❌ UTR validation failed:", JSON.stringify({ raw: utr, normalized: normalizedUTR, length: normalizedUTR.length }));
+      return res.status(400).json({ success: false, message: `Invalid UTR format. Must be 12-22 alphanumeric characters. You entered ${normalizedUTR.length} characters.` });
     }
 
     const reg = registrationsDB[orderId];

@@ -289,8 +289,8 @@ export default function RegistrationForm() {
                     {/* Verification Form */}
                     <form onSubmit={handleVerify}>
                         <div className="form-group">
-                            <label>Enter UTR Number (12 Digits) *</label>
-                            <input type="text" value={utr} onChange={(e) => setUtr(e.target.value)} disabled={loading} placeholder="e.g. 786515036928" required />
+                            <label>Enter UTR / Transaction Reference Number *</label>
+                            <input type="text" value={utr} onChange={(e) => setUtr(e.target.value)} disabled={loading} placeholder="e.g. 786515036928 (12-22 chars)" required />
                         </div>
 
                         <div className="form-group" style={{ position: "relative" }}>
