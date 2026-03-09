@@ -15,33 +15,44 @@ const paymentConfig = require("./paymentConfig");
 
 const app = express();
 
-// ─── CORS: Only allow your frontend domains ────────────────────────────────────
+/*
+ ─── CORS: Allowed frontend domains ──────────────────────────────────────────
+*/
 const allowedOrigins = [
+  "https://nri-tech-arena-hackthon-system-webs.vercel.app",
   "https://nri-techarena-hackthon-system-website-527.pages.dev",
-  "https://nri-techarena-hackthon-system-website.pages.dev",
-  "https://nri-techarena-hackthon-system-website-.pages.dev",
   "http://localhost:5173",
-  "http://localhost:3000",
-  process.env.FRONTEND_URL
-].filter(Boolean);
+  "http://localhost:3000"
+];
 
 const corsOptions = {
   origin: function (origin, callback) {
+
+    // Allow requests without origin (Postman, curl, mobile apps)
     if (!origin) return callback(null, true);
+
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+
     console.log("Blocked by CORS:", origin);
-    return callback(new Error("Blocked by CORS: " + origin));
+    return callback(new Error("Not allowed by CORS"));
   },
+
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization"
+  ],
+
   credentials: true
 };
 
+// Apply CORS middleware
 app.use(cors(corsOptions));
 
-// Handle preflight OPTIONS requests — THIS IS THE KEY FIX
+// Handle preflight requests
 app.options("*", cors(corsOptions));
 
 app.use(express.json());
