@@ -111,6 +111,20 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads", "payments")))
 // Fallback for direct /uploads/payments/ access
 app.use("/uploads/payments", express.static(path.join(__dirname, "uploads", "payments")));
 
+// ─── Admin: Login ─────────────────────────────────────────────────────────────
+app.post("/api/admin/login", (req, res) => {
+  const { email, password } = req.body;
+  const adminEmail = getSecret("ADMIN_EMAIL", "chilimurusharma@gmail.com");
+  const adminPass = getSecret("ADMIN_PASSWORD", "0123456727@");
+  const adminKey = getSecret("ADMIN_KEY", "supersecretadmin");
+
+  if (email === adminEmail && password === adminPass) {
+    res.json({ success: true, adminKey });
+  } else {
+    res.status(401).json({ success: false, message: "Invalid email or password" });
+  }
+});
+
 // ─── Google API Setup (Sheets + Drive) ─────────────────────────────────────────
 const SHEET_ID = getSecret("GOOGLE_SHEET_ID") || "1LarTOmgXNCCmcQ0Lu-MRIlCY3fvrUDNzqoPiN__yCOQ";
 let sheets, drive;

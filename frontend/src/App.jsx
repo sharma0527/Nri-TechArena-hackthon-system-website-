@@ -51,24 +51,34 @@ function App() {
     }
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const adminMail = import.meta.env.VITE_ADMIN_EMAIL || "chilimurusharma@gmail.com";
-    const adminPass = import.meta.env.VITE_ADMIN_PASSWORD || "0123456727@";
+    setLoading(true);
+    setLoginError(null);
 
-    if (emailInput === adminMail) {
-      if (passwordInput === adminPass) {
+    try {
+      const res = await axios.post(`${API}/api/admin/login`, {
+        email: emailInput,
+        password: passwordInput
+      });
+
+      if (res.data.success) {
         setAuthStatus('admin');
-        setMode(null); // admin sees the selection panel
-        setLoginError(null);
-      } else {
-        setLoginError("Incorrect password for Admin");
+        setMode(null);
+        // Store admin key for later use in dashboards
+        localStorage.setItem("adminKey", res.data.adminKey);
       }
-    } else {
-      // Any other email -> go to hackathon registration
-      setAuthStatus('guest');
-      setMode('register');
-      setLoginError(null);
+    } catch (err) {
+      if (err.response?.status === 401) {
+        // Not an admin, try guest access if email is not the admin email
+        // Actually, let's just show an error for the admin login form.
+        setLoginError("Invalid admin credentials");
+      } else {
+        // Possible network error or unexpected issue
+        setLoginError("Login failed. Please ensure backend is running.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

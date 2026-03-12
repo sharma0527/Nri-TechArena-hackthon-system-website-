@@ -21,7 +21,7 @@ export default function AdminDashboard() {
         try {
             await apiFetch(`/api/delete-registration/${orderId}`, {
                 method: "DELETE",
-                headers: { authorization: "supersecretadmin" }
+                headers: { authorization: localStorage.getItem("adminKey") || "supersecretadmin" }
             });
             alert("Registration deleted successfully");
             fetchRegistrations(); // refresh table
@@ -79,7 +79,7 @@ export default function AdminDashboard() {
         try {
             const res = await apiFetch("/api/toggle-payment", {
                 method: "POST",
-                headers: { authorization: "supersecretadmin" }
+                headers: { authorization: localStorage.getItem("adminKey") || "supersecretadmin" }
             });
             setPaymentStatus(res);
             alert(`Payments have been successfully ${res.paymentsStopped ? "STOPPED" : "RESUMED"}!`);
