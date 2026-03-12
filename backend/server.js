@@ -34,10 +34,10 @@ const allowedOrigins = [
   "https://nri-tech-arena-hackthon-system-git-affb3c-sharma0527s-projects.vercel.app",
   "https://nri-tech-arena-hackthon-system-website-hvau21qom.vercel.app",
   "https://nri-tech-arena-hackthon-system-git-d2617a-sharma0527s-projects.vercel.app",
-  "https://nri-tech-arena-hackthon-system-website-7rvwrhh6l.vercel.app",
-  // Cloudflare Pages (production + preview)
+  "https://nri-techarena-hackthon-system-website-7rvwrhh6l.vercel.app",
+  // Cloudflare Pages (New)
+  "https://nri-techarena-hackthon-system-0527.pages.dev",
   "https://nri-techarena-hackthon-system-website-527.pages.dev",
-  "https://2967ce05.nri-techarena-hackthon-system-website-527.pages.dev",
   // Local development
   "http://localhost:5173",
   "http://localhost:3000"
@@ -78,6 +78,10 @@ app.use(express.json());
 // ─── Health Checks ─────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
   res.send("Hackathon Registration Backend is running 🚀");
+});
+
+app.get("/healthz", (req, res) => {
+  res.status(200).send("OK");
 });
 
 app.get("/health", (req, res) => {
@@ -708,7 +712,7 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
     }
     
     const localImageUrl = `/uploads/payments/${newFilename}`;
-    const BACKEND_URL = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL || (req ? `${req.protocol}://${req.get('host')}` : "http://localhost:5000");
+    const BACKEND_URL = process.env.RENDER_EXTERNAL_URL || "https://nri-techarena-hackthon-system-website-3.onrender.com";
     let screenshotUrl = `${BACKEND_URL}${localImageUrl}`;
     
     // Save to memory DB for persistence across flushes
@@ -791,6 +795,24 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
   } catch (error) {
     console.error("❌ Verification Error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+app.get("/admin/backups", (req, res) => {
+  try {
+    const backupPath = path.join(__dirname, "registrations_testing_backup.xlsx");
+    if (!fs.existsSync(backupPath)) {
+      return res.json([]);
+    }
+    const workbook = xlsx.readFile(backupPath);
+    if (!workbook.Sheets["Registrations"]) {
+      return res.json([]);
+    }
+    const data = xlsx.utils.sheet_to_json(workbook.Sheets["Registrations"]);
+    res.json(data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch backups" });
   }
 });
 
