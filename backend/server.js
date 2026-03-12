@@ -596,37 +596,90 @@ app.post("/send-single-mail", async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════════
 
 app.post("/api/register", registerLimiter, (req, res) => {
-  const { teamName, domain, department, branch, teamLeadName, teamLeadEmail, teamLeadPhone, members } = req.body;
+  try {
+    const {
+      teamName,
+      department,
+      domain,
+      branch,
+      teamLeadName,
+      teamLeadEmail,
+      teamLeadPhone,
+      members
+    } = req.body;
 
-  if (!teamName || !teamLeadName || !teamLeadEmail) {
-    return res.status(400).json({ error: "Missing required fields" });
+    /* Required fields */
+    if (!teamName || !teamLeadName || !teamLeadEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: Team Name, Lead Name, and Email are required."
+      });
+    }
+
+    /* Team member validation (1 to 5 members total including Lead) */
+    const totalMembers = (members || []).length + 1;
+
+    if (totalMembers < 1 || totalMembers > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Team must contain 1 to 5 members total (including Lead)."
+      });
+    }
+
+    /* Validate each additional member if any */
+    if (members && members.length > 0) {
+      for (let m of members) {
+        if (!m.name || !m.email || !m.branch) {
+          return res.status(400).json({
+            success: false,
+            message: "Member details incomplete. Each member must have a name, email, and branch."
+          });
+        }
+      }
+    }
+
+    /* Duplicate email check */
+    const allEmails = [teamLeadEmail, ...(members || []).map(m => m.email).filter(Boolean)];
+    const uniqueEmails = new Set(allEmails.map(e => e.toLowerCase().trim()));
+    if (uniqueEmails.size !== allEmails.filter(Boolean).length) {
+      return res.status(400).json({
+        success: false,
+        message: "Duplicate email addresses detected in team."
+      });
+    }
+
+    const orderId = "order_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+
+    registrationsDB[orderId] = {
+      orderId,
+      teamName,
+      domain,
+      department,
+      branch,
+      teamLeadName,
+      teamLeadEmail,
+      teamLeadPhone,
+      members: members || [],
+      status: "Pending Payment",
+      attempts: 0,
+      createdAt: new Date()
+    };
+
+    const fee = calculateFee(totalMembers);
+    res.json({
+      success: true,
+      orderId,
+      fee,
+      message: "Order created successfully"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Registration failed"
+    });
   }
-
-  // Duplicate email check
-  const allEmails = [teamLeadEmail, ...(members || []).map(m => m.email).filter(Boolean)];
-  const uniqueEmails = new Set(allEmails.map(e => e.toLowerCase().trim()));
-  if (uniqueEmails.size !== allEmails.filter(Boolean).length) {
-    return res.status(400).json({ error: "Duplicate email addresses detected in team" });
-  }
-
-  // Team size validation (4-5 total including lead)
-  const totalMembers = (members || []).length + 1;
-  if (totalMembers < 4 || totalMembers > 5) {
-    return res.status(400).json({ error: "Team must have 4-5 members (including team lead)" });
-  }
-
-  const orderId = "order_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-  registrationsDB[orderId] = {
-    orderId, teamName, domain, department, branch,
-    teamLeadName, teamLeadEmail, teamLeadPhone,
-    members,
-    status: "Pending Payment",
-    attempts: 0,
-    createdAt: new Date(),
-  };
-
-  const fee = calculateFee(totalMembers);
-  res.json({ orderId, fee, message: "Order created successfully" });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════════

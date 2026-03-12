@@ -82,9 +82,20 @@ export default function RegistrationForm() {
             return;
         }
 
-        const validMembers = members.filter(m => m.name.trim() !== "" && m.email.trim() !== "");
-        if (validMembers.length < 3) {
-            setError("A team must have a minimum of 4 members (Team Lead + at least 3 members). Please fill their details.");
+        // Total members = Lead (1) + Additional Members
+        const validMembers = members.filter(m => m.name.trim() !== "" || m.email.trim() !== "" || m.branch.trim() !== "");
+        
+        // Comprehensive check for each added member
+        for(let m of validMembers) {
+            if(!m.name.trim() || !m.email.trim() || !m.branch.trim()) {
+                setError("Please fill all details (Name, Email, Branch) for each added member.");
+                return;
+            }
+        }
+
+        const totalCount = validMembers.length + 1;
+        if (totalCount < 1 || totalCount > 5) {
+            setError("A team must have between 1 and 5 members (including Team Lead).");
             return;
         }
 
@@ -95,7 +106,8 @@ export default function RegistrationForm() {
             const res = await apiFetch("/api/register", {
                 method: "POST",
                 body: JSON.stringify({
-                    teamName, domain, department, branch, teamLeadName, teamLeadEmail, teamLeadPhone, members
+                    teamName, domain, department, branch, teamLeadName, teamLeadEmail, teamLeadPhone, 
+                    members: validMembers
                 })
             });
             setOrderId(res.orderId);
@@ -552,7 +564,7 @@ export default function RegistrationForm() {
 
                 <div className="form-section">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                        <h3 style={{ margin: 0 }}>Team Members (Min 3, Max 4)</h3>
+                        <h3 style={{ margin: 0 }}>Team Members (Max 4 extra)</h3>
                         <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{members.length}/4</span>
                     </div>
 
