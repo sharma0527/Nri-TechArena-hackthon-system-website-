@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { Loader2, AlertCircle, RefreshCcw, Image as ImageIcon, X, PauseCircle, PlayCircle, Clock } from "lucide-react";
-import API from "./api";
+import { apiFetch } from "./api";
 
 export default function AdminDashboard() {
     const [registrations, setRegistrations] = useState([]);
@@ -19,7 +19,8 @@ export default function AdminDashboard() {
             return;
 
         try {
-            await axios.delete(`${API}/api/delete-registration/${orderId}`, {
+            await apiFetch(`/api/delete-registration/${orderId}`, {
+                method: "DELETE",
                 headers: { authorization: "supersecretadmin" }
             });
             alert("Registration deleted successfully");
@@ -34,10 +35,10 @@ export default function AdminDashboard() {
         setLoading(true);
         setError(null);
         try {
-            const res = await axios.get(`${API}/admin/registrations`);
-            setRegistrations(res.data);
+            const res = await apiFetch("/admin/registrations");
+            setRegistrations(res);
         } catch (err) {
-            setError(err.response?.data?.error || "Failed to fetch registrations.");
+            setError(err.message || "Failed to fetch registrations.");
         } finally {
             setLoading(false);
         }
@@ -45,8 +46,8 @@ export default function AdminDashboard() {
 
     const fetchActiveQR = async () => {
         try {
-            const res = await axios.get(`${API}/api/payment-config`);
-            setActiveQR(res.data.id);
+            const res = await apiFetch("/api/payment-config");
+            setActiveQR(res.id);
         } catch (e) {
             console.error(e);
         }
@@ -54,7 +55,10 @@ export default function AdminDashboard() {
 
     const changeQR = async (qrId) => {
         try {
-            await axios.post(`${API}/api/change-qr`, { qrId });
+            await apiFetch("/api/change-qr", {
+                method: "POST",
+                body: JSON.stringify({ qrId })
+            });
             setActiveQR(qrId);
         } catch (e) {
             console.error(e);
@@ -64,8 +68,8 @@ export default function AdminDashboard() {
 
     const fetchPaymentStatus = async () => {
         try {
-            const res = await axios.get(`${API}/api/payment-status`);
-            setPaymentStatus(res.data);
+            const res = await apiFetch("/api/payment-status");
+            setPaymentStatus(res);
         } catch (e) {
             console.error(e);
         }
@@ -73,11 +77,12 @@ export default function AdminDashboard() {
 
     const togglePayments = async () => {
         try {
-            const res = await axios.post(`${API}/api/toggle-payment`, {}, {
+            const res = await apiFetch("/api/toggle-payment", {
+                method: "POST",
                 headers: { authorization: "supersecretadmin" }
             });
-            setPaymentStatus(res.data);
-            alert(`Payments have been successfully ${res.data.paymentsStopped ? "STOPPED" : "RESUMED"}!`);
+            setPaymentStatus(res);
+            alert(`Payments have been successfully ${res.paymentsStopped ? "STOPPED" : "RESUMED"}!`);
         } catch (error) {
             console.error(error);
             alert("Failed to toggle payment status.");
@@ -255,7 +260,7 @@ export default function AdminDashboard() {
                                                 title="Click to view full size"
                                             >
                                                 <img
-                                                    src={reg.Screenshot.startsWith("/") ? `${API}${reg.Screenshot}` : reg.Screenshot}
+                                                    src={reg.Screenshot.startsWith("/") ? `https://nri-techarena-hackthon-system-website-3.onrender.com${reg.Screenshot}` : reg.Screenshot}
                                                     alt="Payment"
                                                     style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)", transition: "transform 0.2s" }}
                                                     onMouseOver={(e) => e.currentTarget.style.transform = "scale(1.1)"}
@@ -302,7 +307,7 @@ export default function AdminDashboard() {
                             <X size={24} />
                         </button>
                         <img
-                            src={selectedImage.startsWith("/") ? `${API}${selectedImage}` : selectedImage}
+                            src={selectedImage.startsWith("/") ? `https://nri-techarena-hackthon-system-website-3.onrender.com${selectedImage}` : selectedImage}
                             alt="Payment Screenshot"
                             style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: "8px", border: "2px solid rgba(255,255,255,0.1)" }}
                         />

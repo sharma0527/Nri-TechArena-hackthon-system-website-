@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { Plus, Trash2, CheckCircle2, AlertCircle, ShieldCheck, UploadCloud, Lock, Loader2, XCircle } from "lucide-react";
-import API from "./api";
+import { apiFetch } from "./api";
 // QR images are now served from /public/qr/ and paths are provided by the backend config
 
 
@@ -41,15 +41,15 @@ export default function RegistrationForm() {
         localStorage.removeItem("orderId");
         setOrderId(null);
 
-        axios.get(`${API}/api/payment-status`)
-            .then(res => setGlobalStatus(res.data))
+        apiFetch("/api/payment-status")
+            .then(res => setGlobalStatus(res))
             .catch(err => console.error(err));
     }, []);
 
     useEffect(() => {
         if (step === 2) {
-            axios.get(`${API}/api/payment-config`)
-                .then(res => setPayment(res.data))
+            apiFetch("/api/payment-config")
+                .then(res => setPayment(res))
                 .catch(err => console.error(err));
         }
     }, [step]);
@@ -92,13 +92,16 @@ export default function RegistrationForm() {
         setLoading(true);
 
         try {
-            const res = await axios.post(`${API}/api/register`, {
-                teamName, domain, department, branch, teamLeadName, teamLeadEmail, teamLeadPhone, members
+            const res = await apiFetch("/api/register", {
+                method: "POST",
+                body: JSON.stringify({
+                    teamName, domain, department, branch, teamLeadName, teamLeadEmail, teamLeadPhone, members
+                })
             });
-            setOrderId(res.data.orderId);
+            setOrderId(res.orderId);
             setStep(2);
         } catch (err) {
-            setError(err.response?.data?.error || "Registration failed. Ensure backend is running.");
+            setError(err.message || "Registration failed. Ensure backend is running.");
             console.error(err);
         } finally {
             setLoading(false);
@@ -128,24 +131,29 @@ export default function RegistrationForm() {
             formData.append("utr", utr);
             formData.append("screenshot", screenshot);
 
-            const res = await axios.post(`${API}/api/verify-payment`, formData, {
-                headers: { "Content-Type": "multipart/form-data" }
+            // Special handling for FormData in apiFetch
+            const res = await apiFetch("/api/verify-payment", {
+                method: "POST",
+                body: formData,
+                headers: {
+                    // Do not set Content-Type, browser will handle it for FormData
+                }
             });
 
             setVerifyStage("done");
 
-            if (res.data.success) {
+            if (res.success) {
                 setVerifyResult({
                     success: true,
-                    message: res.data.message,
+                    message: res.message,
                 });
                 setShowTermsPopup(true);
             } else {
                 setVerifyResult({
                     success: false,
-                    score: res.data.score,
-                    checks: res.data.checks,
-                    message: res.data.message
+                    score: res.score,
+                    checks: res.checks,
+                    message: res.message
                 });
                 setShowSupportPopup(true);
             }

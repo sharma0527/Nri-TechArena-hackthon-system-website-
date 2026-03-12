@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { Loader2, AlertCircle, RefreshCcw, X, DatabaseBackup } from "lucide-react";
-import API from "./api";
+import { apiFetch } from "./api";
 
 export default function BackupDashboard() {
     const [registrations, setRegistrations] = useState([]);
@@ -13,10 +13,10 @@ export default function BackupDashboard() {
         setLoading(true);
         setError(null);
         try {
-            const res = await axios.get(`${API}/admin/backups`);
-            setRegistrations(res.data);
+            const res = await apiFetch("/admin/backups");
+            setRegistrations(res);
         } catch (err) {
-            setError(err.response?.data?.error || "Failed to fetch backups.");
+            setError(err.message || "Failed to fetch backups.");
         } finally {
             setLoading(false);
         }
@@ -123,7 +123,7 @@ export default function BackupDashboard() {
                                                 title="Click to view full size"
                                             >
                                                 <img
-                                                    src={reg.Screenshot.startsWith("/") ? `${API}${reg.Screenshot}` : reg.Screenshot}
+                                                    src={reg.Screenshot.startsWith("/") ? `https://nri-techarena-hackthon-system-website-3.onrender.com${reg.Screenshot}` : reg.Screenshot}
                                                     alt="Payment"
                                                     style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.2)", transition: "transform 0.2s" }}
                                                     onMouseOver={(e) => e.currentTarget.style.transform = "scale(1.1)"}
@@ -162,7 +162,7 @@ export default function BackupDashboard() {
                             <X size={24} />
                         </button>
                         <img
-                            src={selectedImage.startsWith("/") ? `${API}${selectedImage}` : selectedImage}
+                            src={selectedImage.startsWith("/") ? `https://nri-techarena-hackthon-system-website-3.onrender.com${selectedImage}` : selectedImage}
                             alt="Payment Screenshot"
                             style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: "8px", border: "2px solid rgba(255,255,255,0.1)" }}
                         />

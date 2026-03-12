@@ -286,39 +286,56 @@ if (process.env.EMAIL && process.env.PASSWORD) {
   console.error("⚠️  EMAIL or PASSWORD env var missing — email features disabled.");
 }
 
+// ─── Permanent Storage ──────────────────────────────────────────────────────────
+const DATA_FILE = path.join(__dirname, "data", "registrations.json");
+
+/* Load registrations from disk */
+function loadRegistrationsFromDisk() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) {
+      if (!fs.existsSync(path.join(__dirname, "data"))) {
+        fs.mkdirSync(path.join(__dirname, "data"));
+      }
+      fs.writeFileSync(DATA_FILE, "[]");
+    }
+    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("❌ Failed loading registrations:", err);
+    return [];
+  }
+}
+
+/* Save registration permanently */
+function saveRegistrationPermanent(registration) {
+  try {
+    let data = loadRegistrationsFromDisk();
+    data.push(registration);
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    console.log("✅ Registration permanently stored");
+  } catch (err) {
+    console.error("❌ Failed saving registration:", err);
+  }
+}
+
 // ─── In-Memory Stores ──────────────────────────────────────────────────────────
 const registrationsDB = {};
 const usedUTRs = new Set();
 const usedImageHashes = new Set();
 
-// Load existing UTRs and Hashes from Databases on startup to strictly block duplicates globally
+// Load existing registrations and locked fraud signatures
+const storedRegistrations = loadRegistrationsFromDisk();
+storedRegistrations.forEach(reg => {
+  registrationsDB[reg.OrderID || reg.orderId] = reg;
+  if (reg.UTR) usedUTRs.add(reg.UTR.toString().replace(/\s/g, "").trim());
+  if (reg.ScreenshotHash) usedImageHashes.add(reg.ScreenshotHash);
+});
+console.log(`✅ Loaded ${storedRegistrations.length} registrations from persistent storage.`);
+
+// Load additional UTRs and Hashes from Excel (if any exist independently)
 const excelDBPath = path.join(__dirname, "registrations.xlsx");
 const backupDBPath = path.join(__dirname, "registrations_testing_backup.xlsx");
-const registrationsFilePath = path.join(__dirname, "registrations.json");
 
-// 1. Load registrations from JSON into memory
-if (fs.existsSync(registrationsFilePath)) {
-  try {
-    const data = JSON.parse(fs.readFileSync(registrationsFilePath, "utf-8"));
-    data.forEach(reg => {
-      registrationsDB[reg.OrderID || reg.orderId] = {
-        orderId: reg.OrderID || reg.orderId,
-        teamName: reg.TeamName || reg.teamName,
-        teamLeadEmail: reg.LeadEmail || reg.teamLeadEmail,
-        teamLeadName: reg.LeadName || reg.teamLeadName,
-        members: reg.Members || reg.members || [],
-        amount: reg.Amount || 1000,
-        status: reg.Status || "Confirmed",
-        utr: reg.UTR || ""
-      };
-    });
-    console.log(`✅ Loaded ${Object.keys(registrationsDB).length} registrations from persistent storage.`);
-  } catch (e) {
-    console.error("Error loading registrations.json:", e);
-  }
-}
-
-// 2. Load UTRs and Hashes from Excel
 [excelDBPath, backupDBPath].forEach(dbPath => {
   if (fs.existsSync(dbPath)) {
     try {
@@ -336,7 +353,7 @@ if (fs.existsSync(registrationsFilePath)) {
   }
 });
 if (usedUTRs.size > 0 || usedImageHashes.size > 0) {
-  console.log(`✅ Locked ${usedUTRs.size} previously successful UTRs and ${usedImageHashes.size} hashes from all databases.`);
+  console.log(`✅ Locked ${usedUTRs.size} previously successful UTRs and ${usedImageHashes.size} hashes.`);
 }
 
 // ─── Dynamic Fee Calculator ────────────────────────────────────────────────────
@@ -727,9 +744,31 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
 
         const activeAccount = paymentConfig.accounts.find(a => a.id === paymentConfig.activeQR);
 
-        // Persistent JSON Flush
-        const allConfirmed = Object.values(registrationsDB).filter(r => r.status === "Confirmed");
-        fs.writeFileSync(registrationsFilePath, JSON.stringify(allConfirmed, null, 2));
+        const registrationRecord = {
+          OrderID: reg.orderId,
+          TeamName: reg.teamName,
+          Department: reg.department || "",
+          Domain: reg.domain || "",
+          Branch: reg.branch || "",
+          LeadName: reg.teamLeadName,
+          LeadEmail: reg.teamLeadEmail,
+          LeadPhone: reg.teamLeadPhone || "",
+          Members: totalMembers,
+          UTR: normalizedUTR,
+          Amount: amount,
+          Receiver: activeAccount ? activeAccount.name : "Unknown",
+          QR_ID: activeAccount ? activeAccount.id : 0,
+          Screenshot: screenshotUrl,
+          ScreenshotHash: imageHash,
+          Status: "Confirmed",
+          Date: new Date().toISOString()
+        };
+
+        // Permanent storage
+        saveRegistrationPermanent(registrationRecord);
+
+        // Memory update
+        registrationsDB[reg.orderId] = registrationRecord;
 
         // Excel Update
         const excelPath = path.join(__dirname, "registrations.xlsx");
@@ -787,98 +826,23 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
 
 app.get("/admin/backups", (req, res) => {
   try {
-    const backupPath = path.join(__dirname, "registrations_testing_backup.xlsx");
-    if (!fs.existsSync(backupPath)) {
-      return res.json([]);
-    }
-    const workbook = xlsx.readFile(backupPath);
-    if (!workbook.Sheets["Registrations"]) {
-      return res.json([]);
-    }
-    const data = xlsx.utils.sheet_to_json(workbook.Sheets["Registrations"]);
+    // Return all records from permanent storage as backups
+    const data = loadRegistrationsFromDisk();
     res.json(data);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Failed to fetch backups" });
+    res.status(500).json({ error: "Backup fetch failed" });
   }
 });
 
-// ─── Admin: Fetch All Registrations (from Excel) ───────────────────────────────
+// ─── Admin: Fetch All Registrations (from Disk) ───────────────────────────────
 app.get("/admin/registrations", (req, res) => {
   try {
-    const excelPath = path.join(__dirname, "registrations.xlsx");
-    if (!fs.existsSync(excelPath)) {
-      return res.json([]);
-    }
-    const workbook = xlsx.readFile(excelPath);
-    if (!workbook.Sheets["Registrations"]) {
-      return res.json([]);
-    }
-    const data = xlsx.utils.sheet_to_json(workbook.Sheets["Registrations"]);
-
-    // ─── NORMALIZE & AUTO-LOCATE SCREENSHOTS ───
-    const BACKEND_URL = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-
-    data.forEach(reg => {
-      // If it exists but is a full URL from another domain, normalize it to this domain
-      if (reg.Screenshot && typeof reg.Screenshot === 'string') {
-        if (reg.Screenshot.includes('/uploads/')) {
-          const fileName = reg.Screenshot.split('/').pop();
-          // Check if file exists in payments or root
-          if (fs.existsSync(path.join(__dirname, "uploads", "payments", fileName))) {
-            reg.Screenshot = `${BACKEND_URL}/uploads/payments/${fileName}`;
-          } else if (fs.existsSync(path.join(__dirname, "uploads", fileName))) {
-            reg.Screenshot = `${BACKEND_URL}/uploads/${fileName}`;
-          } else {
-            // Keep original but try to use our domain if it matches pattern
-            reg.Screenshot = `${BACKEND_URL}/uploads/payments/${fileName}`;
-          }
-        }
-      }
-
-      // If missing completely, try to auto-locate by OrderID
-      if (!reg.Screenshot) {
-        const orderId = reg.OrderID;
-        if (orderId) {
-          const searchDirs = [path.join(__dirname, "uploads", "payments"), path.join(__dirname, "uploads")];
-          for (const dir of searchDirs) {
-            if (fs.existsSync(dir)) {
-              const files = fs.readdirSync(dir);
-              const match = files.find(f => f.startsWith(orderId));
-              if (match) {
-                const subPath = dir.includes('payments') ? 'payments/' : '';
-                reg.Screenshot = `${BACKEND_URL}/uploads/${subPath}${match}`;
-                break;
-              }
-            }
-          }
-        }
-      }
-    });
-
+    const data = loadRegistrationsFromDisk();
     res.json(data.reverse());
-  } catch (error) {
-    console.error("Admin fetch error:", error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ─── Admin: Fetch Backup/Testing Registrations ─────────────────────────────────
-app.get("/admin/backups", (req, res) => {
-  try {
-    const backupPath = path.join(__dirname, "registrations_testing_backup.xlsx");
-    if (!fs.existsSync(backupPath)) {
-      return res.json([]);
-    }
-    const workbook = xlsx.readFile(backupPath);
-    if (!workbook.Sheets["Registrations"]) {
-      return res.json([]);
-    }
-    const data = xlsx.utils.sheet_to_json(workbook.Sheets["Registrations"]);
-    res.json(data.reverse());
-  } catch (error) {
-    console.error("Backup fetch error:", error.message);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch registrations" });
   }
 });
 
