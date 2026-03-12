@@ -23,6 +23,24 @@ try {
 }
 const paymentConfig = require("./paymentConfig");
 
+// ─── Render Secret Files Helper ──────────────────────────────────────────────
+function getSecret(key, defaultValue = null) {
+  // 1. Check environment variables (Render/Local)
+  if (process.env[key]) return process.env[key];
+  
+  // 2. Check Render Secret Files path
+  const secretPath = path.join("/etc/secrets", key);
+  if (fs.existsSync(secretPath)) {
+    try {
+      return fs.readFileSync(secretPath, "utf8").trim();
+    } catch (e) {
+      console.log(`⚠️  Error reading secret file ${key}:`, e.message);
+    }
+  }
+  
+  return defaultValue;
+}
+
 const app = express();
 
 /*
@@ -76,7 +94,7 @@ app.get("/health", (req, res) => {
     status: "ok",
     service: "hackathon-backend",
     email: emailReady ? "ready" : "not configured",
-    emailAccount: process.env.EMAIL ? process.env.EMAIL.replace(/(.{3}).*(@.*)/, '$1***$2') : "missing",
+    emailAccount: APP_EMAIL ? APP_EMAIL.replace(/(.{3}).*(@.*)/, '$1***$2') : "missing",
     sheets: sheets ? "connected" : "disabled",
     drive: drive ? "connected" : "disabled"
   });
@@ -94,13 +112,15 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads", "payments")))
 app.use("/uploads/payments", express.static(path.join(__dirname, "uploads", "payments")));
 
 // ─── Google API Setup (Sheets + Drive) ─────────────────────────────────────────
-const SHEET_ID = process.env.GOOGLE_SHEET_ID || "1LarTOmgXNCCmcQ0Lu-MRIlCY3fvrUDNzqoPiN__yCOQ";
+const SHEET_ID = getSecret("GOOGLE_SHEET_ID") || "1LarTOmgXNCCmcQ0Lu-MRIlCY3fvrUDNzqoPiN__yCOQ";
 let sheets, drive;
 
 let auth;
-if (process.env.GOOGLE_CREDENTIALS) {
+const googleCreds = getSecret("GOOGLE_CREDENTIALS") || getSecret("credentials");
+
+if (googleCreds) {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const credentials = JSON.parse(googleCreds);
     auth = new google.auth.GoogleAuth({
       credentials,
       scopes: [
@@ -109,7 +129,7 @@ if (process.env.GOOGLE_CREDENTIALS) {
       ],
     });
   } catch (e) {
-    console.log("⚠️  Failed to parse GOOGLE_CREDENTIALS env var:", e.message);
+    console.log("⚠️  Failed to parse Google credentials (JSON error):", e.message);
   }
 } else {
   const serviceAccountPath = path.join(__dirname, "credentials.json");
@@ -122,8 +142,23 @@ if (process.env.GOOGLE_CREDENTIALS) {
       ],
     });
   } else {
-    console.log("⚠️  Credentials file not found — Google Sheets/Drive disabled.");
-    console.log("   Place your credentials JSON at:", serviceAccountPath);
+    // Last ditch: try to construct from individual secrets if they exist
+    const clientEmail = getSecret("GOOGLE_CLIENT_EMAIL");
+    const privateKey = getSecret("GOOGLE_PRIVATE_KEY");
+    if (clientEmail && privateKey) {
+      auth = new google.auth.GoogleAuth({
+        credentials: {
+          client_email: clientEmail,
+          private_key: privateKey.replace(/\\n/g, '\n'),
+        },
+        scopes: [
+          "https://www.googleapis.com/auth/spreadsheets",
+          "https://www.googleapis.com/auth/drive"
+        ],
+      });
+    } else {
+      console.log("⚠️  Google credentials not found — Google Sheets/Drive disabled.");
+    }
   }
 }
 
@@ -249,7 +284,7 @@ app.get("/api/payment-status", (req, res) => {
 });
 
 app.post("/api/toggle-payment", (req, res) => {
-  const adminKey = process.env.ADMIN_KEY || "supersecretadmin";
+  const adminKey = getSecret("ADMIN_KEY", "supersecretadmin");
   if (req.headers.authorization !== adminKey) {
     return res.status(403).json({ error: "Unauthorized" });
   }
@@ -259,31 +294,33 @@ app.post("/api/toggle-payment", (req, res) => {
 });
 
 // ─── Email Transport ───────────────────────────────────────────────────────────
+const APP_EMAIL = getSecret("EMAIL");
+const APP_PASSWORD = getSecret("PASSWORD");
+
 let emailReady = false;
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL,
-    pass: process.env.PASSWORD,
+    user: APP_EMAIL,
+    pass: APP_PASSWORD,
   },
-  connectionTimeout: 10000,  // 10s to establish connection
-  greetingTimeout: 10000,    // 10s for SMTP greeting
-  socketTimeout: 15000,      // 15s for socket inactivity
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
 });
 
 // Verify email credentials on startup
-if (process.env.EMAIL && process.env.PASSWORD) {
+if (APP_EMAIL && APP_PASSWORD) {
   transporter.verify()
     .then(() => {
       emailReady = true;
-      console.log(`✅ Email transport verified (${process.env.EMAIL})`);
+      console.log(`✅ Email transport verified (${APP_EMAIL})`);
     })
     .catch(err => {
       console.error(`❌ Email transport FAILED: ${err.message}`);
-      console.error(`   Emails will NOT work until this is fixed.`);
     });
 } else {
-  console.error("⚠️  EMAIL or PASSWORD env var missing — email features disabled.");
+  console.error("⚠️  EMAIL or PASSWORD secret missing — email features disabled.");
 }
 
 // ─── Permanent Storage ──────────────────────────────────────────────────────────
@@ -903,7 +940,7 @@ app.get("/admin/registrations", (req, res) => {
 app.delete("/api/delete-registration/:orderId", async (req, res) => {
   try {
     // Security Recommendation: Admin Protection
-    const adminKey = process.env.ADMIN_KEY || "supersecretadmin";
+    const adminKey = getSecret("ADMIN_KEY", "supersecretadmin");
     if (req.headers.authorization !== adminKey) {
       return res.status(403).json({ error: "Unauthorized" });
     }
@@ -971,7 +1008,7 @@ app.listen(PORT, () => {
   console.log(`\n${"═".repeat(50)}`);
   console.log(`  Hackathon Registration Server`);
   console.log(`  Port: ${PORT}`);
-  console.log(`  Email: ${process.env.EMAIL}`);
+  console.log(`  Email: ${APP_EMAIL || "Not configured"}`);
   console.log(`  Google Sheets: ${sheets ? "Connected" : "Disabled"}`);
   console.log(`  Google Drive: ${drive ? "Connected" : "Disabled"}`);
   console.log(`${"═".repeat(50)}\n`);
