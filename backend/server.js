@@ -44,26 +44,13 @@ const allowedOrigins = [
 ];
 
 const corsOptions = {
-  origin: function (origin, callback) {
-
-    // Allow requests without origin (Postman, curl, mobile apps)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    console.log("Blocked by CORS:", origin);
-    return callback(new Error("Not allowed by CORS"));
-  },
-
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization"
+  origin: [
+    "https://nri-techarena-hackthon-system-0527.pages.dev",
+    "http://localhost:5173",
+    "http://localhost:3000"
   ],
-
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 };
 
@@ -451,11 +438,11 @@ async function verifyPayment(imagePath, expectedAmount, utr) {
     const isFuzzyPass = score >= 80;
 
     if (isFuzzyPass) {
-      return { 
-        success: true, 
-        confidence, 
-        score, 
-        checks: { name: finalNameCheck, status: statusCheck, amount: amountCheck, utr: utrCheck, date: dateCheck } 
+      return {
+        success: true,
+        confidence,
+        score,
+        checks: { name: finalNameCheck, status: statusCheck, amount: amountCheck, utr: utrCheck, date: dateCheck }
       };
     }
 
@@ -467,9 +454,9 @@ async function verifyPayment(imagePath, expectedAmount, utr) {
     if (!dateCheck) missingInfo.push("Date Context");
 
     return {
-      success: false, 
-      reason: `Missing: ${missingInfo.join(", ")}`, 
-      confidence, 
+      success: false,
+      reason: `Missing: ${missingInfo.join(", ")}`,
+      confidence,
       score,
       checks: { name: finalNameCheck, status: statusCheck, amount: amountCheck, utr: utrCheck, date: dateCheck }
     };
@@ -702,19 +689,19 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
     const ext = path.extname(req.file.originalname) || ".png";
     const newFilename = `${orderId}_${Date.now()}${ext}`;
     const permanentPath = path.join(__dirname, "uploads", "payments", newFilename);
-    
+
     try {
-        if (fs.existsSync(req.file.path)) {
-            fs.renameSync(req.file.path, permanentPath);
-        }
+      if (fs.existsSync(req.file.path)) {
+        fs.renameSync(req.file.path, permanentPath);
+      }
     } catch (e) {
-        console.error("Failed to move screenshot:", e.message);
+      console.error("Failed to move screenshot:", e.message);
     }
-    
+
     const localImageUrl = `/uploads/payments/${newFilename}`;
     const BACKEND_URL = process.env.RENDER_EXTERNAL_URL || "https://nri-techarena-hackthon-system-website-3.onrender.com";
     let screenshotUrl = `${BACKEND_URL}${localImageUrl}`;
-    
+
     // Save to memory DB for persistence across flushes
     reg.Screenshot = screenshotUrl;
     reg.utr = normalizedUTR;
@@ -730,14 +717,14 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
       try {
         // Cloud Drive Sync
         const driveUrl = await uploadToDrive(permanentPath, newFilename);
-        
+
         // Update screenshotUrl if Drive upload succeeded
         if (driveUrl) {
-            screenshotUrl = driveUrl;
-            // Update the Excel record and JSON with the cloud URL too
-            reg.screenshotUrl = driveUrl; 
+          screenshotUrl = driveUrl;
+          // Update the Excel record and JSON with the cloud URL too
+          reg.screenshotUrl = driveUrl;
         }
-        
+
         const activeAccount = paymentConfig.accounts.find(a => a.id === paymentConfig.activeQR);
 
         // Persistent JSON Flush
@@ -748,7 +735,7 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
         const excelPath = path.join(__dirname, "registrations.xlsx");
         const excelRow = {
           OrderID: reg.orderId, TeamName: reg.teamName, LeadName: reg.teamLeadName,
-          LeadEmail: reg.teamLeadEmail, UTR: normalizedUTR, Amount: amount, 
+          LeadEmail: reg.teamLeadEmail, UTR: normalizedUTR, Amount: amount,
           Receiver: activeAccount ? activeAccount.name : "Unknown",
           QR_ID: activeAccount ? activeAccount.id : null,
           Screenshot: screenshotUrl, Status: "Confirmed", Date: new Date().toLocaleString()
@@ -765,27 +752,27 @@ app.post("/api/verify-payment", verifyLimiter, upload.single("screenshot"), asyn
 
         // Multi-Member Email Automation
         console.log(`📧 Dispatching emails for team: ${reg.teamName}`);
-        
+
         // 1. Team Lead Email
         try {
-            await sendConfirmationEmail(reg.teamLeadEmail, reg.teamLeadName, reg.teamName, reg.domain, normalizedUTR);
+          await sendConfirmationEmail(reg.teamLeadEmail, reg.teamLeadName, reg.teamName, reg.domain, normalizedUTR);
         } catch (e) {
-            console.error(`⚠️ Lead email failed but registration is recorded:`, e.message);
+          console.error(`⚠️ Lead email failed but registration is recorded:`, e.message);
         }
 
         // 2. Additional Member Emails
         if (reg.members && reg.members.length > 0) {
-            for (const m of reg.members) {
-                if (m.email && m.email.trim()) {
-                    try {
-                        await sendConfirmationEmail(m.email.trim(), m.name, reg.teamName, reg.domain, normalizedUTR);
-                    } catch (e) {
-                        console.error(`⚠️ Member email (${m.email}) failed:`, e.message);
-                    }
-                }
+          for (const m of reg.members) {
+            if (m.email && m.email.trim()) {
+              try {
+                await sendConfirmationEmail(m.email.trim(), m.name, reg.teamName, reg.domain, normalizedUTR);
+              } catch (e) {
+                console.error(`⚠️ Member email (${m.email}) failed:`, e.message);
+              }
             }
+          }
         }
-        
+
         console.log(`✅ All background processing finished for ${orderId}`);
       } catch (err) {
         console.error("🔥 Critical Background Task Error:", err);
@@ -828,10 +815,10 @@ app.get("/admin/registrations", (req, res) => {
       return res.json([]);
     }
     const data = xlsx.utils.sheet_to_json(workbook.Sheets["Registrations"]);
-    
+
     // ─── NORMALIZE & AUTO-LOCATE SCREENSHOTS ───
     const BACKEND_URL = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-    
+
     data.forEach(reg => {
       // If it exists but is a full URL from another domain, normalize it to this domain
       if (reg.Screenshot && typeof reg.Screenshot === 'string') {
